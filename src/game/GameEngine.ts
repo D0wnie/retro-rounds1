@@ -72,6 +72,9 @@ export class GameEngine {
 
   keys: Record<string, boolean> = {};
   mouseDown: boolean = false;
+  mobileMoveX: number = 0;
+  mobileMoveY: number = 0;
+  mobileShooting: boolean = false;
   shootCooldown: number = 0;
   weaponBob: number = 0;
   shootFlash: number = 0;
@@ -150,15 +153,20 @@ export class GameEngine {
       hasDash: false,
       dashCooldown: 2,
       lastDash: 0,
+      jumpCooldown: 1,
+      lastJump: -10,
     };
   }
 
   private setupInput() {
     const onKey = (e: KeyboardEvent, down: boolean) => {
       this.keys[e.code] = down;
-      if (down && e.code === 'Digit1') this.player.currentWeapon = 0;
-      if (down && e.code === 'Digit2') this.player.currentWeapon = 1;
-      if (down && e.code === 'Digit3') this.player.currentWeapon = 2;
+      if (down) {
+        if (e.code === 'Digit1') this.player.currentWeapon = 0;
+        if (e.code === 'Digit2') this.player.currentWeapon = 1;
+        if (e.code === 'Digit3') this.player.currentWeapon = 2;
+        if (e.code === 'Space') this.activateJump();
+      }
     };
     window.addEventListener('keydown', (e) => { e.preventDefault(); onKey(e, true); });
     window.addEventListener('keyup', (e) => onKey(e, false));
@@ -169,12 +177,7 @@ export class GameEngine {
       if (!document.pointerLockElement) return;
       const sensitivity = 0.003;
       const dx = e.movementX * sensitivity;
-      const oldDirX = this.player.dirX;
-      this.player.dirX = this.player.dirX * Math.cos(dx) - this.player.dirY * Math.sin(dx);
-      this.player.dirY = oldDirX * Math.sin(dx) + this.player.dirY * Math.cos(dx);
-      const oldPlaneX = this.player.planeX;
-      this.player.planeX = this.player.planeX * Math.cos(dx) - this.player.planeY * Math.sin(dx);
-      this.player.planeY = oldPlaneX * Math.sin(dx) + this.player.planeY * Math.cos(dx);
+      this.rotateView(dx);
     });
 
     // Mouse click = shoot
@@ -189,6 +192,64 @@ export class GameEngine {
     document.addEventListener('mouseup', (e) => {
       if (e.button === 0) this.mouseDown = false;
     });
+  }
+
+  setMobileMovement(x: number, y: number) {
+    this.mobileMoveX = x;
+    this.mobileMoveY = y;
+  }
+
+  setMobileAim(deltaX: number) {
+    if (this.state !== 'playing') return;
+    const sensitivity = 0.004;
+    this.rotateView(deltaX * sensitivity);
+  }
+
+  setMobileShooting(active: boolean) {
+    this.mobileShooting = active;
+    if (active && this.state === 'playing') {
+      this.shoot();
+    }
+  }
+
+  activateJump() {
+    if (this.state !== 'playing') return;
+    this.tryJump();
+  }
+
+  private rotateView(dx: number) {
+    const oldDirX = this.player.dirX;
+    this.player.dirX = this.player.dirX * Math.cos(dx) - this.player.dirY * Math.sin(dx);
+    this.player.dirY = oldDirX * Math.sin(dx) + this.player.dirY * Math.cos(dx);
+    const oldPlaneX = this.player.planeX;
+    this.player.planeX = this.player.planeX * Math.cos(dx) - this.player.planeY * Math.sin(dx);
+    this.player.planeY = oldPlaneX * Math.sin(dx) + this.player.planeY * Math.cos(dx);
+  }
+
+  private tryJump() {
+    const p = this.player;
+    if ((this.timeAlive - p.lastJump) < p.jumpCooldown) return;
+    p.lastJump = this.timeAlive;
+
+    const boost = p.moveSpeed * 0.18;
+    this.screenShake = 0.35;
+    this.movePlayer(p.dirX * boost * 4, p.dirY * boost * 4);
+  }
+
+  private movePlayer(moveX: number, moveY: number) {
+    const p = this.player;
+    const margin = 0.3;
+    const newPX = p.posX + moveX;
+    const newPY = p.posY + moveY;
+    const checkX = Math.floor(newPX + Math.sign(moveX) * margin);
+    const checkY = Math.floor(newPY + Math.sign(moveY) * margin);
+
+    if (checkX >= 0 && checkX < MAP_W && MAP[Math.floor(p.posY)][checkX] === 0) {
+      p.posX = newPX;
+    }
+    if (checkY >= 0 && checkY < MAP_H && MAP[Math.floor(newPY)][Math.floor(p.posX)] === 0) {
+      p.posY = newPY;
+    }
   }
 
   startGame() {
@@ -241,7 +302,7 @@ export class GameEngine {
     this.waveAnnounceTimer = Math.max(0, this.waveAnnounceTimer - dt);
 
     // Movement bobbing
-    const isMoving = this.keys['KeyW'] || this.keys['KeyS'] || this.keys['KeyA'] || this.keys['KeyD'];
+    const isMoving = this.keys['KeyW'] || this.keys['KeyS'] || this.keys['KeyA'] || this.keys['KeyD'] || this.mobileMoveX !== 0 || this.mobileMoveY !== 0;
     if (isMoving) {
       this.weaponBob += dt * 10;
     } else {
@@ -259,8 +320,8 @@ export class GameEngine {
     this.updateEnemies(dt);
     this.checkPickups();
 
-    // Continuous fire with mouse held
-    if (this.mouseDown && document.pointerLockElement) {
+    // Continuous fire with mouse held or touch shoot button held
+    if ((this.mouseDown && document.pointerLockElement) || this.mobileShooting) {
       this.shoot();
     }
 
@@ -291,23 +352,21 @@ export class GameEngine {
       moveY += p.dirX * speed;
     }
 
+    // Mobile joystick movement
+    if (this.mobileMoveX !== 0 || this.mobileMoveY !== 0) {
+      moveX += p.dirX * this.mobileMoveY * speed;
+      moveY += p.dirY * this.mobileMoveY * speed;
+      moveX -= p.dirY * this.mobileMoveX * speed;
+      moveY += p.dirX * this.mobileMoveX * speed;
+    }
+
     // Keyboard turning with arrows
     const turnSpeed = 3.0 * dt;
     if (this.keys['ArrowLeft']) {
-      const oldDirX = p.dirX;
-      p.dirX = p.dirX * Math.cos(turnSpeed) - p.dirY * Math.sin(turnSpeed);
-      p.dirY = oldDirX * Math.sin(turnSpeed) + p.dirY * Math.cos(turnSpeed);
-      const oldPlaneX = p.planeX;
-      p.planeX = p.planeX * Math.cos(turnSpeed) - p.planeY * Math.sin(turnSpeed);
-      p.planeY = oldPlaneX * Math.sin(turnSpeed) + p.planeY * Math.cos(turnSpeed);
+      this.rotateView(turnSpeed);
     }
     if (this.keys['ArrowRight']) {
-      const oldDirX = p.dirX;
-      p.dirX = p.dirX * Math.cos(-turnSpeed) - p.dirY * Math.sin(-turnSpeed);
-      p.dirY = oldDirX * Math.sin(-turnSpeed) + p.dirY * Math.cos(-turnSpeed);
-      const oldPlaneX = p.planeX;
-      p.planeX = p.planeX * Math.cos(-turnSpeed) - p.planeY * Math.sin(-turnSpeed);
-      p.planeY = oldPlaneX * Math.sin(-turnSpeed) + p.planeY * Math.cos(-turnSpeed);
+      this.rotateView(-turnSpeed);
     }
 
     // Dash
@@ -318,18 +377,7 @@ export class GameEngine {
       this.screenShake = 0.5;
     }
 
-    // Collision detection
-    const newPX = p.posX + moveX;
-    const newPY = p.posY + moveY;
-    const checkX = Math.floor(newPX + Math.sign(moveX) * margin);
-    const checkY = Math.floor(newPY + Math.sign(moveY) * margin);
-
-    if (checkX >= 0 && checkX < MAP_W && MAP[Math.floor(p.posY)][checkX] === 0) {
-      p.posX = newPX;
-    }
-    if (checkY >= 0 && checkY < MAP_H && MAP[checkY][Math.floor(p.posX)] === 0) {
-      p.posY = newPY;
-    }
+    this.movePlayer(moveX, moveY);
   }
 
   private shoot() {

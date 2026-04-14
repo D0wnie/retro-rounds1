@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { GameEngine } from '@/game/GameEngine';
+import { useIsMobile } from '@/hooks/use-mobile';
 import type { GameState } from '@/game/types';
 
 export default function GameCanvas() {
@@ -11,6 +12,10 @@ export default function GameCanvas() {
     wave: 0, score: 0, bestScore: 0, bestWave: 0, time: 0, kills: 0, enemiesLeft: 0,
   });
   const [upgradeChoices, setUpgradeChoices] = useState<{ name: string; description: string; icon: string }[]>([]);
+  const isMobile = useIsMobile();
+  const joystickRef = useRef<{ id: number; centerX: number; centerY: number } | null>(null);
+  const aimRef = useRef<{ id: number; lastX: number; lastY: number } | null>(null);
+  const [joystickPosition, setJoystickPosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -37,30 +42,151 @@ export default function GameCanvas() {
     };
   }, []);
 
+  const updateJoystick = useCallback((x: number, y: number) => {
+    engineRef.current?.setMobileMovement(x, y);
+    setJoystickPosition({ x, y });
+  }, []);
+
+  const endJoystick = useCallback(() => {
+    updateJoystick(0, 0);
+    joystickRef.current = null;
+  }, [updateJoystick]);
+
+  const handleJoystickTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const touch = event.changedTouches[0];
+    const rect = event.currentTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    joystickRef.current = { id: touch.identifier, centerX, centerY };
+    const dx = (touch.clientX - centerX) / (rect.width / 2);
+    const dy = (centerY - touch.clientY) / (rect.height / 2);
+    updateJoystick(Math.max(-1, Math.min(1, dx)), Math.max(-1, Math.min(1, dy)));
+  }, [updateJoystick]);
+
+  const handleJoystickTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (!joystickRef.current) return;
+    const touch = Array.from(event.changedTouches).find(t => t.identifier === joystickRef.current?.id);
+    if (!touch) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const dx = (touch.clientX - joystickRef.current.centerX) / (rect.width / 2);
+    const dy = (joystickRef.current.centerY - touch.clientY) / (rect.height / 2);
+    updateJoystick(Math.max(-1, Math.min(1, dx)), Math.max(-1, Math.min(1, dy)));
+  }, [updateJoystick]);
+
+  const handleAimTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const touch = event.changedTouches[0];
+    aimRef.current = { id: touch.identifier, lastX: touch.clientX, lastY: touch.clientY };
+  }, []);
+
+  const handleAimTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (!aimRef.current) return;
+    const touch = Array.from(event.changedTouches).find(t => t.identifier === aimRef.current?.id);
+    if (!touch) return;
+    const dx = touch.clientX - aimRef.current.lastX;
+    aimRef.current.lastX = touch.clientX;
+    aimRef.current.lastY = touch.clientY;
+    engineRef.current?.setMobileAim(dx);
+  }, []);
+
+  const handleAimTouchEnd = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (!aimRef.current) return;
+    const touch = Array.from(event.changedTouches).find(t => t.identifier === aimRef.current?.id);
+    if (touch) aimRef.current = null;
+  }, []);
+
+  const handleMobileShootStart = useCallback((event: React.TouchEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    engineRef.current?.setMobileShooting(true);
+  }, []);
+
+  const handleMobileShootEnd = useCallback(() => {
+    engineRef.current?.setMobileShooting(false);
+  }, []);
+
+  const handleMobileJump = useCallback((event: React.TouchEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    engineRef.current?.activateJump();
+  }, []);
+
   const requestPointerLock = useCallback(() => {
     canvasRef.current?.requestPointerLock();
   }, []);
 
   const startGame = useCallback(() => {
     engineRef.current?.startGame();
-    requestPointerLock();
-  }, [requestPointerLock]);
+    if (!isMobile) requestPointerLock();
+  }, [isMobile, requestPointerLock]);
 
   const selectUpgrade = useCallback((index: number) => {
     engineRef.current?.applyUpgrade(index);
-    requestPointerLock();
-  }, [requestPointerLock]);
+    if (!isMobile) requestPointerLock();
+  }, [isMobile, requestPointerLock]);
 
   return (
     <div className="fixed inset-0 bg-black overflow-hidden">
       <canvas
         ref={canvasRef}
         className="w-full h-full block"
-        style={{ imageRendering: 'pixelated', cursor: gameState === 'playing' ? 'none' : 'default' }}
+        style={{ imageRendering: 'pixelated', cursor: gameState === 'playing' && !isMobile ? 'none' : 'default' }}
         onClick={() => {
-          if (gameState === 'playing') requestPointerLock();
+          if (gameState === 'playing' && !isMobile) requestPointerLock();
         }}
       />
+
+      {isMobile && gameState === 'playing' && (
+        <>
+          <div
+            className="absolute left-4 bottom-28 z-20 w-36 h-36 rounded-full bg-black/40 border border-white/10"
+            style={{ touchAction: 'none' }}
+            onTouchStart={handleJoystickTouchStart}
+            onTouchMove={handleJoystickTouchMove}
+            onTouchEnd={endJoystick}
+            onTouchCancel={endJoystick}
+          >
+            <div className="absolute inset-0 rounded-full border border-white/20" />
+            <div
+              className="absolute left-1/2 top-1/2 h-12 w-12 rounded-full bg-white/25"
+              style={{ transform: `translate(calc(-50% + ${joystickPosition.x * 18}px), calc(-50% + ${joystickPosition.y * 18}px))` }}
+            />
+          </div>
+
+          <div
+            className="absolute top-0 right-0 h-full w-1/2 z-10"
+            style={{ touchAction: 'none' }}
+            onTouchStart={handleAimTouchStart}
+            onTouchMove={handleAimTouchMove}
+            onTouchEnd={handleAimTouchEnd}
+            onTouchCancel={handleAimTouchEnd}
+          />
+
+          <button
+            className="absolute right-4 bottom-32 z-20 rounded-full bg-red-600/80 px-5 py-3 text-sm font-bold text-white shadow-lg"
+            onTouchStart={handleMobileShootStart}
+            onTouchEnd={handleMobileShootEnd}
+            onTouchCancel={handleMobileShootEnd}
+            style={{ touchAction: 'none' }}
+          >
+            SHOOT
+          </button>
+
+          <button
+            className="absolute right-4 bottom-12 z-20 rounded-full bg-slate-800/90 px-4 py-3 text-sm font-bold text-white shadow-lg"
+            onTouchStart={handleMobileJump}
+            style={{ touchAction: 'none' }}
+          >
+            JUMP
+          </button>
+
+          <div className="absolute left-4 bottom-4 z-20 text-xs text-white/80 font-mono">
+            TOUCH LEFT — MOVE · SWIPE RIGHT — AIM · USE BUTTONS TO FIRE / JUMP
+          </div>
+        </>
+      )}
 
       {/* MAIN MENU */}
       {gameState === 'menu' && (
@@ -92,11 +218,20 @@ export default function GameCanvas() {
           >
             ▶ START GAME
           </button>
-          <div className="mt-8 text-center space-y-1" style={{ color: '#555', fontFamily: 'monospace', fontSize: '10px' }}>
-            <p>WASD — MOVE &nbsp;&nbsp; MOUSE — AIM &nbsp;&nbsp; LEFT CLICK — SHOOT</p>
-            <p>1/2/3 — WEAPONS &nbsp;&nbsp; SHIFT — DASH</p>
-            <p className="mt-2" style={{ color: '#444' }}>CLICK GAME WINDOW TO LOCK MOUSE</p>
-          </div>
+          {isMobile ? (
+            <div className="mt-8 text-center space-y-1" style={{ color: '#555', fontFamily: 'monospace', fontSize: '10px' }}>
+              <p>TOUCH LEFT JOYSTICK — MOVE</p>
+              <p>SWIPE RIGHT PANEL — AIM</p>
+              <p>SHOOT BUTTON — FIRE</p>
+              <p className="mt-2" style={{ color: '#444' }}>TAP START TO BEGIN</p>
+            </div>
+          ) : (
+            <div className="mt-8 text-center space-y-1" style={{ color: '#555', fontFamily: 'monospace', fontSize: '10px' }}>
+              <p>WASD — MOVE &nbsp;&nbsp; MOUSE — AIM &nbsp;&nbsp; LEFT CLICK — SHOOT</p>
+              <p>1/2/3 — WEAPONS &nbsp;&nbsp; SHIFT — DASH</p>
+              <p className="mt-2" style={{ color: '#444' }}>CLICK GAME WINDOW TO LOCK MOUSE</p>
+            </div>
+          )}
           {stats.bestScore > 0 && (
             <div className="mt-6 text-center" style={{ color: '#666', fontFamily: 'monospace', fontSize: '10px' }}>
               <p>BEST SCORE: <span style={{ color: '#ffaa00' }}>{stats.bestScore}</span> &nbsp; BEST WAVE: <span style={{ color: '#ffaa00' }}>{stats.bestWave}</span></p>

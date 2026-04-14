@@ -60,6 +60,8 @@ export interface PlayerState {
   hasDash: boolean;
   dashCooldown: number;
   lastDash: number;
+  jumpCooldown: number;
+  lastJump: number;
 }
 
 export type GameState = 'menu' | 'playing' | 'upgrading' | 'gameover';
