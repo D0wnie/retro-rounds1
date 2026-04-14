@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 4%;
+    --foreground: 120 100% 50%;
+
+    --card: 0 0% 8%;
+    --card-foreground: 120 100% 50%;
+
+    --popover: 0 0% 8%;
+    --popover-foreground: 120 100% 50%;
+
+    --primary: 120 100% 50%;
+    --primary-foreground: 0 0% 0%;
+
+    --secondary: 0 100% 40%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 60%;
+
+    --accent: 30 100% 50%;
+    --accent-foreground: 0 0% 0%;
+
+    --destructive: 0 100% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 120 100% 20%;
+    --input: 0 0% 15%;
+    --ring: 120 100% 50%;
+
+    --radius: 0.25rem;
+
+    --font-pixel: 'Press Start 2P', monospace;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-pixel);
+    overflow: hidden;
+    cursor: none;
+  }
+}
+
+@layer utilities {
+  .text-glow {
+    text-shadow: 0 0 10px hsl(120 100% 50% / 0.8), 0 0 20px hsl(120 100% 50% / 0.4);
+  }
+
+  .text-glow-red {
+    text-shadow: 0 0 10px hsl(0 100% 50% / 0.8), 0 0 20px hsl(0 100% 50% / 0.4);
+  }
+
+  .text-glow-amber {
+    text-shadow: 0 0 10px hsl(30 100% 50% / 0.8), 0 0 20px hsl(30 100% 50% / 0.4);
+  }
+
+  .scanlines {
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      hsl(0 0% 0% / 0.15) 2px,
+      hsl(0 0% 0% / 0.15) 4px
+    );
+    pointer-events: none;
+  }
+
+  .border-glow {
+    border-color: hsl(120 100% 50% / 0.5);
+    box-shadow: 0 0 10px hsl(120 100% 50% / 0.3), inset 0 0 10px hsl(120 100% 50% / 0.1);
+  }
+}
