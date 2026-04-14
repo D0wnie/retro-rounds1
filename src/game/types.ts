@@ -65,10 +65,10 @@ export interface PlayerState {
 export type GameState = 'menu' | 'playing' | 'upgrading' | 'gameover';
 
 export const ENEMY_STATS: Record<EnemyType, { health: number; speed: number; damage: number; attackRate: number }> = {
-  demon:   { health: 30,  speed: 3.0,  damage: 10, attackRate: 1.0 },
-  shooter: { health: 50,  speed: 1.5,  damage: 15, attackRate: 2.0 },
-  tank:    { health: 150, speed: 1.0,  damage: 25, attackRate: 3.0 },
-  boss:    { health: 500, speed: 1.2,  damage: 35, attackRate: 2.5 },
+  demon:   { health: 30,  speed: 3.4,  damage: 10, attackRate: 1.0 },
+  shooter: { health: 50,  speed: 1.8,  damage: 15, attackRate: 2.0 },
+  tank:    { health: 150, speed: 1.2,  damage: 25, attackRate: 3.0 },
+  boss:    { health: 500, speed: 1.4,  damage: 35, attackRate: 2.5 },
 };
 
 // Bigger, more complex DOOM-like map with corridors and rooms

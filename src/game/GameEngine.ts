@@ -419,8 +419,10 @@ export class GameEngine {
       const dx = p.posX - e.x;
       const dy = p.posY - e.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
+      const meleeRange = e.type === 'boss' ? 1.0 : 0.7;
+      const isContact = dist <= meleeRange;
 
-      if (dist < 0.8) {
+      if (isContact && e.type !== 'shooter') {
         e.lastAttack += dt;
         if (e.lastAttack >= e.attackCooldown) {
           e.lastAttack = 0;
@@ -433,6 +435,9 @@ export class GameEngine {
           }
         }
       } else {
+        if (e.type !== 'shooter') {
+          e.lastAttack = 0;
+        }
         const nx = dx / dist;
         const ny = dy / dist;
         let avoidX = 0, avoidY = 0;
@@ -446,21 +451,26 @@ export class GameEngine {
             avoidY += (oy / od) * 0.5;
           }
         }
-        const mx = (nx + avoidX) * e.speed * dt;
-        const my = (ny + avoidY) * e.speed * dt;
+        const chaseFactor = 1 + Math.max(0, 4 - dist) * 0.15;
+        const mx = (nx + avoidX) * e.speed * chaseFactor * dt;
+        const my = (ny + avoidY) * e.speed * chaseFactor * dt;
         const newX = e.x + mx;
         const newY = e.y + my;
         if (Math.floor(newX) >= 0 && Math.floor(newX) < MAP_W && MAP[Math.floor(e.y)][Math.floor(newX)] === 0) e.x = newX;
         if (Math.floor(newY) >= 0 && Math.floor(newY) < MAP_H && MAP[Math.floor(newY)][Math.floor(e.x)] === 0) e.y = newY;
       }
 
-      if (e.type === 'shooter' && dist > 3 && dist < 15) {
-        e.lastAttack += dt;
-        if (e.lastAttack >= e.attackCooldown) {
+      if (e.type === 'shooter') {
+        if (dist >= 3 && dist <= 12) {
+          e.lastAttack += dt;
+          if (e.lastAttack >= e.attackCooldown) {
+            e.lastAttack = 0;
+            p.health -= e.damage * 0.5;
+            this.damageFlash = 0.5;
+            if (p.health <= 0) { p.health = 0; this.gameOver(); }
+          }
+        } else {
           e.lastAttack = 0;
-          p.health -= e.damage * 0.5;
-          this.damageFlash = 0.5;
-          if (p.health <= 0) { p.health = 0; this.gameOver(); }
         }
       }
     }

@@ -9,28 +9,46 @@ function createWindow() {
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      devTools: false // 🔥 disable inspect
     }
   });
 
-  const indexPath = path.join(__dirname, "dist", "index.html");
-  console.log("Loading file:", indexPath);
+  // remove top menu completely
+  win.setMenu(null);
 
-  win.loadFile(indexPath);
+  // load app
+  win.loadFile(path.join(__dirname, "dist", "index.html"));
 
+  // show when ready
   win.once("ready-to-show", () => {
     win.show();
     win.focus();
   });
 
-  win.webContents.openDevTools();
-
-  win.webContents.on("did-fail-load", (_, errorCode, errorDescription) => {
-    console.error("Failed to load:", errorCode, errorDescription);
+  // 🔥 block devtools shortcuts
+  win.webContents.on("before-input-event", (event, input) => {
+    if (
+      input.key === "F12" ||
+      (input.control && input.shift && input.key.toLowerCase() === "i") ||
+      (input.control && input.shift && input.key.toLowerCase() === "j")
+    ) {
+      event.preventDefault();
+    }
   });
 
+  // 🔥 disable right click
+  win.webContents.on("context-menu", (e) => {
+    e.preventDefault();
+  });
+
+  // optional logs (safe)
   win.webContents.on("did-finish-load", () => {
-    console.log("Electron loaded successfully");
+    console.log("Game loaded successfully");
+  });
+
+  win.webContents.on("did-fail-load", (_, errorCode, errorDescription) => {
+    console.error("Load error:", errorCode, errorDescription);
   });
 }
 
@@ -45,5 +63,7 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
 });
